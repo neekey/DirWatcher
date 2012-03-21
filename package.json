@@ -1,0 +1,12 @@
+{
+    "name": "DirWatcher",
+    "description": "A simple tool for you to watch a directory",
+    "version": "1.0.0",
+    "author": "Neekey <ni184775761@gmail.com>",
+    "keywords": [ "DirWatcher", "directory" ],
+    "main": "DirWatcher.js",
+    "repository": {
+        "type": "git",
+        "url": "git@github.com:neekey/dirwatcher.git"
+    }
+}
