@@ -2,6 +2,8 @@
 
 监控指定目录中文件的增加，删除，修改，子目录的增加，删除等
 
+安装 `npm install DirWatcher`
+
 ### USAGE 使用
 
 	var dw = require( './DirWatcher' );
