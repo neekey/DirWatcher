@@ -16,6 +16,16 @@ var DirList = {};
 // 用于储存每个文件的MD5，path -> md5
 var FileMd5 = {};
 
+// 变更状态枚举
+var ChangeType = {
+    // 文件或者目录有变化
+    modify: 'modify',
+    // 文件或者目录的添加
+    add: 'add',
+    // 文件或者目录被移除
+    remove: 'remove'
+};
+
 var Util = {
 
     /**
@@ -134,12 +144,42 @@ function parseIgnoreFile( path, next ){
 }
 
 /**
- * 读取文件目录，遍历所有的文件和目录
+ * 读取文件目录，遍历所有的文件和目录( 包含dir )
  * @param {String} dir 绝对/相对
  * @param {Function} next function( err, path, ifDir )
  * @param {Boolean} ifIgnore 是否读取目录中的配置文件
  */
 function readDir( dir, next, ifIgnore ){
+
+    // 转化为绝对地址
+    dir = Path.resolve( dir );
+
+    // 检查是否为目录
+    fs.stat( dir, function ( err, stats ){
+
+        if( err ){
+
+            next( err );
+            return;
+        }
+
+        // 如果为目录
+        if( stats.isDirectory() ){
+
+            next( undefined, dir, true );
+
+            _readDir( dir, next, ifIgnore );
+        }
+    });
+}
+
+/**
+ * 读取文件目录，遍历所有的文件和目录( 不包含dir )
+ * @param {String} dir 绝对/相对
+ * @param {Function} next function( err, path, ifDir )
+ * @param {Boolean} ifIgnore 是否读取目录中的配置文件
+ */
+function _readDir( dir, next, ifIgnore ){
 
     // 转化为绝对地址
     dir = Path.resolve( dir );
@@ -159,8 +199,6 @@ function readDir( dir, next, ifIgnore ){
 
         // 如果为目录
         if( stats.isDirectory() ){
-
-            next( undefined, dir, true );
 
             // 遍历目录
             fs.readdir( dir, function ( err, pathArr ){
@@ -264,7 +302,7 @@ function watchDir( dir, next ){
             // 若为目录
             else {
 
-                _chcekDir( path, next );
+                _checkDir( path, next );
             }
         }
     });
@@ -279,11 +317,12 @@ function watchDir( dir, next ){
  */
 function _watchFile( path, next ){
 
-    if( !( path in WatchList ) && WatchList[ path ] !== true ){
+    // 检查文件是否已经处于watch状态
+    if( WatchList[ path ] !== true ){
 
         console.log( 'watch file: ' + path );
 
-        // 如果为文件，则预先计算MD5值
+        // 预先计算MD5值
         _saveFileMd5( path, function ( err, md5 ){
 
             if( err ){
@@ -294,7 +333,9 @@ function _watchFile( path, next ){
 
                 fs.watchFile( path, function ( cur, pre ){
 
-                    // 过滤掉那些只读操作
+                    // 过滤掉：只读操作，比如读取文件
+                    // 由于对文件进行md5计算时，会出发读的变更
+                    // 若不过滤，将不断循环调用
                     if( cur.mtime.valueOf() === pre.mtime.valueOf() &&
                         cur.ctime.valueOf() === pre.ctime.valueOf() ){
 
@@ -311,15 +352,18 @@ function _watchFile( path, next ){
                             console.log( err );
                         }
                         else {
+
                             if( ifChange ){
 
                                 var parentPath = Path.dirname( path );
+                                var type = ChangeType.modify;
 
                                 console.log( 'File: %s changed！Time：%s', path, String( new Date() ) );
-                                next( false, path, cur, pre );
+                                next( false, path, type, cur, pre );
 
+                                // 一个文件的变更，将引发该目录的变更
                                 console.log( 'Directory: %s changed！Time：%s', parentPath, String( new Date() ) );
-                                next( true, parentPath, cur, pre );
+                                next( true, parentPath, type );
                             }
                         }
 
@@ -327,6 +371,7 @@ function _watchFile( path, next ){
 
                 });
 
+                // 将path标记为已经监听
                 WatchList[ path ] = true;
             }
         });
@@ -341,15 +386,16 @@ function _watchFile( path, next ){
  * @param {Function} next
  * @private
  */
-function _chcekDir( path, next ){
+function _checkDir( path, next ){
 
-    // 检查是否已经记录该目录下的路径，若已经有，则进行比较
     fs.readdir( path, function ( err, pathArr ){
 
         var oldPathArr = DirList[ path ];
         var compareResult;
         var removeArr;
         var addArr;
+
+        // 检查是否已经记录该目录下的路径，若已经有，则进行比较
 
         if( !oldPathArr || ( oldPathArr && oldPathArr.constructor !== Array ) ){
 
@@ -366,30 +412,50 @@ function _chcekDir( path, next ){
             removeArr.forEach(function ( item, index ){
 
                 var subPath = Path.resolve( path, item );
+                var p;
 
                 delete WatchList[ subPath ];
 
                 // 检查是否为目录
-                fs.stat( subPath, function ( err, stats ){
+                if( subPath in DirList ){
 
-                    if( err ){
+                    console.log( 'unwatch directory:' + subPath );
 
-                        console.log( err );
-                    }
-                    else {
+                    next( true, subPath, ChangeType.remove );
 
-                        if( stats.isDirectory() ){
+                    // 移除该目录下的所有子文件
+                    for( p in WatchList ){
 
-                            console.log( 'unwatch directory:' + subPath );
-                            next( true, subPath );
+                        // 检查是否为子文件
+                        if( p.indexOf( subPath ) === 0 ){
+
+                            delete WatchList[ p ];
+                            console.log( 'unwatch file:' + p );
+
+                            next( false, p, ChangeType.remove );
                         }
-                        else {
+                    }
 
-                            console.log( 'unwatch file:' + subPath );
-                            next( false, subPath );
+                    // 移除该目录下所有子目录
+                    for( p in DirList ){
+
+                        // 检查是否为子目录
+                        if( p.indexOf( subPath ) === 0 ){
+
+                            delete WatchList[ p ];
+                            console.log( 'unwatch directory:' + p );
+
+                            next( true, p, ChangeType.remove );
                         }
                     }
-                });
+
+                    delete DirList[ subPath ];
+                }
+                else {
+
+                    console.log( 'unwatch file:' + subPath );
+                    next( false, subPath, ChangeType.remove );
+                }
             });
 
             // 便利所有新增的path
@@ -408,19 +474,15 @@ function _chcekDir( path, next ){
 
                         if( stats.isDirectory() ){
 
-                            // 若为目录则添加监视
-                            WatchList[ subPath ] = true;
-
-                            next( true, subPath );
-
                             // 对新目录进行监视
+                            next( true, subPath, ChangeType.add );
                             watchDir( subPath, next );
                         }
                         else {
 
                             // 对新文件进行监视
                             _watchFile( subPath, next );
-                            next( false, subPath );
+                            next( false, subPath, ChangeType.add );
                         }
                     }
                 });
