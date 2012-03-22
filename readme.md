@@ -21,7 +21,7 @@
 ####watchDir( path, next )
 
 * `path`: 目录的路径
-* `next`: 回调，包含四个参数`ifDir`, `path`, `cur`, `pre`
+* `next`: 回调，包含五个个参数`ifDir`, `path`, `type`, `cur`, `pre`
 
 ####readDir( path, next )
 
