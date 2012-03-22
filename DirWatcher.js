@@ -312,7 +312,6 @@ function watchDir( dir, next ){
  * 监听单个文件
  * @param {String} path 绝对
  * @param {Function} next
- * //todo 修改回调参数 添加变更类型
  * @private
  */
 function _watchFile( path, next ){
@@ -362,6 +361,7 @@ function _watchFile( path, next ){
                                 next( false, path, type, cur, pre );
 
                                 // 一个文件的变更，将引发该目录的变更
+                                // todo 递归向上 出发目录的父目录的变更
                                 console.log( 'Directory: %s changed！Time：%s', parentPath, String( new Date() ) );
                                 next( true, parentPath, type );
                             }
@@ -421,6 +421,8 @@ function _checkDir( path, next ){
 
                     console.log( 'unwatch directory:' + subPath );
 
+                    delete DirList[ subPath ];
+
                     next( true, subPath, ChangeType.remove );
 
                     // 移除该目录下的所有子文件
@@ -449,7 +451,6 @@ function _checkDir( path, next ){
                         }
                     }
 
-                    delete DirList[ subPath ];
                 }
                 else {
 
@@ -475,8 +476,8 @@ function _checkDir( path, next ){
                         if( stats.isDirectory() ){
 
                             // 对新目录进行监视
-                            next( true, subPath, ChangeType.add );
                             watchDir( subPath, next );
+                            next( true, subPath, ChangeType.add );
                         }
                         else {
 
