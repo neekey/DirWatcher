@@ -1,5 +1,5 @@
 var dw = require( './DirWatcher.js' );
  dw.watchDir( './', function(){
-    console.log( arguments );
+//    console.log( arguments );
  } );
 
