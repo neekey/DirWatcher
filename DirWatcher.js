@@ -313,6 +313,7 @@ function watchDir( dir, next ){
  * @param {String} path 绝对
  * @param {Function} next
  * @private
+ * // todo 修改成手动监听
  */
 function _watchFile( path, next ){
 
